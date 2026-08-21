@@ -78,7 +78,7 @@ jobs:
             --data "{
               \"board\": \"qcs6490-rb3gen2\",
               \"build\": {
-                \"url\": \"https://qli-stg-artifacts.qualcomm.com/qcom-stg-gh-artifacts/qualcomm-linux-stg/meta-qcom/30864934936-1/qcom-distro/rb3gen2-core-kit/initramfs-rootfs-image-rb3gen2-core-kit.cpio.gz\"
+                \"url\": \"https://qli-stg-artifacts.qualcomm.com/qcom-stg-gh-artifacts/qualcomm-linux-stg/meta-qcom/30726224541-1/qcom-distro/iq-615-evk/qcom-container-orchestration-image-iq-615-evk.rootfs.qcomflash.tar.gz\"
               },
               \"testPlan\": {
                 \"name\": \"test-abort\",
