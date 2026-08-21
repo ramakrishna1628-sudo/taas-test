@@ -1,5 +1,3 @@
-taas-test
-
 ## TaaS GitHub Action
 
 This repo contains `.github/workflows/taas.yml`, which creates a GitHub check run and submits a TaaS job with callback information.
