@@ -1,0 +1,102 @@
+name: TaaS Check Run
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  submit-taas:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Submit TaaS job with GitHub check run callback
+        shell: bash
+        env:
+          QCOM_API_KEY: ${{ secrets.QCOM_API_KEY }}
+          GH_APP_CLIENT_ID: ${{ secrets.GH_APP_CLIENT_ID }}
+          GH_APP_INSTALLATION_ID: ${{ secrets.GH_APP_INSTALLATION_ID }}
+          GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${QCOM_API_KEY}" ] || [ -z "${GH_APP_CLIENT_ID}" ] || [ -z "${GH_APP_INSTALLATION_ID}" ] || [ -z "${GH_APP_PRIVATE_KEY}" ]; then
+            echo "Missing required secrets: QCOM_API_KEY, GH_APP_CLIENT_ID, GH_APP_INSTALLATION_ID, GH_APP_PRIVATE_KEY" >&2
+            exit 1
+          fi
+
+          JWT="$(node - <<'NODE'
+          const crypto = require('crypto');
+
+          const clientId = process.env.GH_APP_CLIENT_ID;
+          const privateKey = process.env.GH_APP_PRIVATE_KEY
+            .trim()
+            .replace(/^"|"$/g, '')
+            .replace(/\\n/g, '\n');
+          const now = Math.floor(Date.now() / 1000);
+
+          const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+          const payload = Buffer.from(JSON.stringify({ iat: now - 60, exp: now + 540, iss: clientId })).toString('base64url');
+          const signing = `${header}.${payload}`;
+          const sign = crypto.createSign('RSA-SHA256');
+          sign.update(signing);
+          const sig = sign.sign(privateKey, 'base64url');
+
+          console.log(`${signing}.${sig}`);
+          NODE
+          )"
+
+          APP_TOKEN="$(
+            curl -sS -X POST "https://api.github.com/app/installations/${GH_APP_INSTALLATION_ID}/access_tokens" \
+              -H "Authorization: Bearer ${JWT}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              | node -e "let d=''; process.stdin.on('data', c => d += c).on('end', () => { const j = JSON.parse(d); if (!j.token) { console.error(d); process.exit(1); } console.log(j.token); })"
+          )"
+
+          CHECK_RUN_ID="$(
+            curl -sS -X POST "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/check-runs" \
+              -H "Authorization: Bearer ${APP_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"name\": \"TaaS Test\",
+                \"head_sha\": \"${HEAD_SHA}\",
+                \"status\": \"queued\"
+              }" \
+              | node -e "let d=''; process.stdin.on('data', c => d += c).on('end', () => { const j = JSON.parse(d); if (!j.id) { console.error(d); process.exit(1); } console.log(j.id); })"
+          )"
+
+          curl --location 'https://dev.api.qualcomm.com/devicecloud/v2/taas/jobs' \
+            --header "Authorization: ${QCOM_API_KEY}" \
+            --header 'X-QCOM-TokenType: apikey' \
+            --header 'X-QCOM-AppName: aihub' \
+            --header "X-QCOM-TracingId: ${GITHUB_RUN_ID}" \
+            --header 'X-QCOM-ClientType: github-actions' \
+            --header 'Content-Type: application/json' \
+            --data "{
+              \"board\": \"qcs6490-rb3gen2\",
+              \"build\": {
+                \"url\": \"https://qli-stg-artifacts.qualcomm.com/qcom-stg-gh-artifacts/qualcomm-linux-stg/meta-qcom/30726224541-1/qcom-distro/iq-615-evk/qcom-container-orchestration-image-iq-615-evk.rootfs.qcomflash.tar.gz\"
+              },
+              \"testPlan\": {
+                \"name\": \"test-abort\",
+                \"framework\": \"LAVA\",
+                \"content\": \"test-abort\"
+              },
+              \"callback\": {
+                \"token\": \"${APP_TOKEN}\",
+                \"owner\": \"${REPO_OWNER}\",
+                \"repo\": \"${REPO_NAME}\",
+                \"sha\": \"${HEAD_SHA}\",
+                \"checkRunId\": ${CHECK_RUN_ID}
+              },
+              \"metadata\": {
+                \"branch\": \"${GITHUB_REF_NAME}\",
+                \"triggeredBy\": \"github-actions\"
+              }
+            }"
