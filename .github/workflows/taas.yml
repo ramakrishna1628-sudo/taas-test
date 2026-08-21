@@ -34,7 +34,10 @@ jobs:
           const crypto = require('crypto');
 
           const clientId = process.env.GH_APP_CLIENT_ID;
-          const privateKey = process.env.GH_APP_PRIVATE_KEY;
+          const privateKey = process.env.GH_APP_PRIVATE_KEY
+            .trim()
+            .replace(/^"|"$/g, '')
+            .replace(/\\n/g, '\n');
           const now = Math.floor(Date.now() / 1000);
 
           const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
