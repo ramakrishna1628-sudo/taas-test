@@ -55,6 +55,7 @@ jobs:
             curl -sS -X POST "https://api.github.com/app/installations/${GH_APP_INSTALLATION_ID}/access_tokens" \
               -H "Authorization: Bearer ${JWT}" \
               -H "Accept: application/vnd.github.v3+json" \
+              -H "User-Agent: taas-github-actions" \
               | node -e "let d=''; process.stdin.on('data', c => d += c).on('end', () => { const j = JSON.parse(d); if (!j.token) { console.error(d); process.exit(1); } console.log(j.token); })"
           )"
 
@@ -63,6 +64,7 @@ jobs:
               -H "Authorization: Bearer ${APP_TOKEN}" \
               -H "Accept: application/vnd.github+json" \
               -H "Content-Type: application/json" \
+              -H "User-Agent: taas-github-actions" \
               -d "{
                 \"name\": \"TaaS Test\",
                 \"head_sha\": \"${HEAD_SHA}\",
